@@ -9,7 +9,7 @@ app.config['PROPAGATE_EXCEPTIONS'] = True
 app.config['SECRET_KEY'] = 'secret_key'
 
 client = MongoClient(os.environ['OPENSHIFT_MONGODB_DB_URL'])
-db = client['localjobs']
+db = client[os.environ['OPENSHIFT_APP_NAME']]
 
 login_manager = LoginManager()
 login_manager.init_app(app)
