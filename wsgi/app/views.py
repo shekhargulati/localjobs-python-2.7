@@ -1,14 +1,29 @@
 from app import app , db , login_manager
-from flask import render_template , request , flash , redirect , url_for ,g , jsonify
+from flask import render_template , request , flash , redirect , url_for ,g , jsonify , Response
 from models import Users
 from flask.ext.login import login_user , logout_user , current_user , login_required
 from bson.objectid import ObjectId
 import json
 from bson import json_util
+from datetime import datetime
+from pygeocoder import Geocoder
+from bson.son import SON
+
+@app.before_request
+def before_request():
+    g.user = current_user
+
 
 @app.route('/')
 def index():
 	return render_template('index.html',title="Welcome to LocalJobs -- Location Aware Job Search Application")
+
+@login_manager.user_loader
+def load_user(id):
+	users_dict = db.users.find_one({"_id": ObjectId(str(id))})
+	registered_user = Users(users_dict.get('email'),users_dict.get('password'),users_dict.get('linkedin_profile_url'),users_dict.get('skills'))
+	registered_user.id = users_dict.get('_id')
+	return registered_user
 
 
 @app.route('/about')
@@ -59,18 +74,49 @@ def logout():
     logout_user()
     return redirect(url_for('index')) 
 
-@login_manager.user_loader
-def load_user(id):
-	users_dict = db.users.find_one({"_id": ObjectId(str(id))})
-	registered_user = Users(users_dict.get('email'),users_dict.get('password'),users_dict.get('linkedin_profile_url'),users_dict.get('skills'))
-	registered_user.id = users_dict.get('_id')
-	return registered_user
 
-@app.before_request
-def before_request():
-    g.user = current_user
+@app.route('/jobs/new' , methods=['GET'])
+@login_required
+def job_form():
+	return render_template('job.html' , title="Create New Job")
 
-@app.route('/search')
+@app.route('/jobs/new' , methods=['POST'])
+@login_required
+def create_job():
+	title = request.form['title']
+	description = request.form['description']
+	skills = [skill.strip().lower() for skill in request.form['skills'].split(',')]
+	location = request.form['location']
+	createdOn = datetime.utcnow()
+	companyName = request.form["companyName"]
+	companyWebSite = request.form["companyWebsite"]
+	companyContactEmail = request.form["companyContactEmail"]
+	companyContactTelephone = request.form["companyContactTelephone"]
+	results = Geocoder.geocode(location)
+	lngLat = [results[0].coordinates[1],results[0].coordinates[0]]
+
+	job = {
+		"title" : title,
+		"description" : description,
+		"skills" : skills,
+		"location" : location,
+		"lngLat" : lngLat,
+		"createdOn" : createdOn,
+		"company" : {
+			"name" : companyName,
+			"website" : companyWebSite,
+			"contact" :{
+				"email": companyContactEmail,
+				"telephone" : companyContactTelephone
+			}
+		}
+	}
+	job_id = db.jobs.insert(job , w=1)
+	flash(u'Job created with id %s' % job_id)
+	return redirect(url_for('create_job'))
+
+
+@app.route('/jobs/search')
 @login_required
 def search():
 	return render_template('search.html' , title="Search Jobs")
@@ -90,8 +136,63 @@ def job(job_id):
 @app.route('/api/jobs/<skills>')
 @login_required
 def jobs_near_with_skills(skills):
-	lat = float(request.args.get('latitude'))
-	lon = float(request.args.get('longitude'))
+	lat = float(request.args.get('lat'))
+	lon = float(request.args.get('lng'))
 
-	jobs = db.jobs.find({"skills" : {"$in" : skills.split(',')} , "location" : { "$near" : [lon,lat]}}).limit(10)
-	return json.dumps({'jobs':list(jobs)},default=json_util.default)
+	results = db.jobs.find({"skills" : {"$in" : skills.split(',')} , "lngLat" : { "$near" : [lon,lat]}}).limit(5)
+	jobs = []
+	for result in results:
+		jobs.append(result)
+
+	return json_response(jobs)
+
+@app.route('/jobs/search-geonear')
+@login_required
+def geonear_search_form():
+	return render_template('search-geonear.html' , title="GeoNear Search Jobs")
+
+@app.route('/jobs/search-geonear/<skills>')
+@login_required
+def geonear_search(skills):
+	lat = float(request.args.get('lat'))
+	lon = float(request.args.get('lng'))
+	docs = db.command(SON([
+		("geoNear" , "jobs"),
+  		("near" , [lon , lat]),
+  		("query", {"skills" : {"$in" : skills.split(',')}}),
+  		("limit" , 5),
+  		("distanceMultiplier" , 111)
+	]))
+
+	print(docs['results'])
+	jobs = []
+
+	for result in docs['results']:
+		job = toJob(result)
+		jobs.append(job)
+
+	return render_template('showall.html',title='All Jobs', jobs=jobs)
+
+
+def toJob(doc):
+
+	return {
+		"title" : doc['obj']['title'],
+		"description" :doc['obj']['description'],
+		"skills" : [str(skill) for skill in doc['obj']['skills']],
+		"location" :doc['obj']['location'],
+		"createdOn" : doc['obj']['createdOn'],
+		"distance" : doc['dis'],
+		"company" :{
+			"name" : doc['obj']['company']["name"],
+			"website" : doc['obj']['company']["website"],
+			"contact" :{
+				"email" : doc['obj']['company']['contact']['email']
+			}
+		}
+
+	}
+
+
+def json_response(data):
+	return Response(json.dumps({'jobs':data},default=json_util.default),mimetype="application/json")

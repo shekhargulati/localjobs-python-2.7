@@ -29,12 +29,17 @@
   <div class="collapse navbar-collapse navbar-ex1-collapse">
     <ul class="nav navbar-nav">
       <li class="active"><a href="{{url_for('index')}}">Home</a></li>
-      <li><a href="{{url_for('about')}}">About</a></li>
-      <li><a href="{{url_for('contact')}}">Contact Us</a></li>
       
+      {% if g.user.is_authenticated()%}
+      <li><a href="{{url_for('create_job')}}">Create New Job</a></li>
+      <li><a href="{{url_for('search')}}">Search(with Near)</a></li>
+      <li><a href="{{url_for('geonear_search_form')}}">Search(with GeoNear)</a></li>
+      {% endif %}
     </ul>
 
     <ul class="nav navbar-nav navbar-right">
+      <li><a href="{{url_for('about')}}">About</a></li>
+      <li><a href="{{url_for('contact')}}">Contact Us</a></li>
       {% if not g.user.is_authenticated()%}
         <li><a href="{{url_for('signin')}}">Sign in</a></li>
         <li><a href="{{url_for('register')}}">Register</a></li>

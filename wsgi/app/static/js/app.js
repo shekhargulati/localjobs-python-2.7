@@ -48,7 +48,7 @@ function callback(latitude , longitude , skills){
 	console.log('longitude .. '+longitude);
 	console.log('latitude .. '+latitude);
 	var userLocation = new google.maps.LatLng(latitude , longitude);
-	$.get("/api/jobs/"+skills+"?longitude="+longitude+"&latitude="+latitude  , function (data){ 
+	$.get("/api/jobs/"+skills+"?lng="+longitude+"&lat="+latitude  , function (data){ 
 		 $("#jobSearchForm").unmask();
 		 renderAllJobs(data , userLocation);
 	});
@@ -56,17 +56,16 @@ function callback(latitude , longitude , skills){
 
 function renderAllJobs(data , userLocation){
 	var directionsService = new google.maps.DirectionsService();
-	result = JSON.parse(data)
-	$.each(result.jobs , function(index , job){
+	$.each(data.jobs , function(index , job){
 		renderJob(job , userLocation , directionsService);
 	});
 }
 
 function renderJob(job , userLocation , directionsService){
 	var jobRow = "<div class='row'>";
-	jobRow += "<h2>"+job.jobTitle+" at "+job.company.companyName+"</h2>";
-	jobRow += "<div id='routeMap-"+job._id.$oid+"' class='col-md-6' style='height: 500px'></div>";
-	jobRow += "<div id='directionsPanel-"+job._id.$oid+"' class='col-md-4' style='height: 500px;overflow:scroll'></div>";
+	jobRow += "<h2>"+job.title+" at "+job.company.name+"</h2>";
+	jobRow += "<div id='routeMap-"+job._id.$oid +"' class='col-md-6' style='height: 500px'></div>";
+	jobRow += "<div id='directionsPanel-"+job._id.$oid +"' class='col-md-4' style='height: 500px;overflow:scroll'></div>";
 	jobRow += "</div>";
 	$('#results').append(jobRow);
 	
@@ -114,7 +113,7 @@ function renderJob(job , userLocation , directionsService){
 	
 	var request = {
 				   origin : userLocation,
-				   destination : new google.maps.LatLng(job.location[1] ,job.location[0]),
+				   destination : new google.maps.LatLng(job.lngLat[1] ,job.lngLat[0]),
 				   travelMode : google.maps.DirectionsTravelMode.DRIVING,
 				   unitSystem: google.maps.UnitSystem.METRIC
 	};
@@ -140,4 +139,3 @@ function makeMarker( map , position, icon, title ) {
   title: title
  });
 }
-
